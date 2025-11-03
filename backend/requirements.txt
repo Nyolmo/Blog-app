@@ -1,0 +1,25 @@
+# --- Core Django + DRF ---
+Django==5.1.1
+djangorestframework==3.15.2
+django-filter==24.3
+django-cors-headers==4.4.0
+
+# --- Authentication ---
+djangorestframework-simplejwt==5.3.1
+
+# --- Environment & Settings Management ---
+python-dotenv==1.0.1
+
+# --- Media, Images, and Static Files ---
+Pillow==11.0.0    # image uploads (profile pics, post images, etc.)
+
+# --- Optional but Highly Recommended ---
+drf-yasg==1.21.7  # API documentation (Swagger / ReDoc)
+whitenoise==6.7.0 # serve static files in production
+
+# --- Database (if using PostgreSQL) ---
+psycopg2-binary==2.9.10  # comment out if you're using SQLite locally
+
+# --- Development Tools ---
+black==24.10.0     # code formatter
+isort==5.13.2      # import sorter
