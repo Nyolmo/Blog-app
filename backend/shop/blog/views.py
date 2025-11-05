@@ -59,30 +59,28 @@ class PostViewSet(viewsets.ModelViewSet):
     # ✅ Enhancement 2: Cached or optimized list queries could be added here later
 
     # ✅ Enhancement 3: Add a comment to a post (authenticated or guest)
-    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticatedOrReadOnly],
-            throttle_classes=[ScopedRateThrottle])
-    def add_comment(self, request, pk=None):
-        """
-        Adds a new comment to the given post.
-        - Authenticated users → author is saved.
-        - Anonymous users → author=None (optional).
-        """
-        post = self.get_object()
-        serializer = CommentSerializer(data=request.data)
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticatedOrReadOnly])
+    def add_comment(self, request, slug=None):
+        try:
+            post = self.get_object()
+            serializer = CommentSerializer(data=request.data)
 
-        if serializer.is_valid():
-            serializer.save(
-                post=post,
-                author=request.user if request.user.is_authenticated else None
-            )
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+            if serializer.is_valid():
+                serializer.save(
+                    post=post,
+                    author=request.user if request.user.is_authenticated else None
+                )
+                return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     # ✅ Enhancement 4: Toggle Like on a post
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated],
             throttle_classes=[UserRateThrottle])
-    def toggle_like(self, request, pk=None):
+    def toggle_like(self, request, slug=None):
         """
         Toggles the like state for the logged-in user on a post.
         Returns updated like count and status.
@@ -105,7 +103,7 @@ class PostViewSet(viewsets.ModelViewSet):
 
     # ✅ Enhancement 5: Get approved comments for a post (paginated)
     @action(detail=True, methods=['get'])
-    def comments(self, request, pk=None):
+    def comments(self, request, slug=None):
         """
         Retrieve all approved comments for a specific post.
         """

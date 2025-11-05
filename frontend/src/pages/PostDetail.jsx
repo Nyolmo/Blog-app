@@ -5,25 +5,32 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { toast } from 'react-toastify';
 import { isAuthenticated, getUserInfo } from '../auth';
-import 'react-toastify/dist/ReactToastify.css';
 import Skeleton from 'react-loading-skeleton';
+import 'react-toastify/dist/ReactToastify.css';
 import 'react-loading-skeleton/dist/skeleton.css';
 
-// Error fallback component
+function useDarkMode() {
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark');
+  useEffect(() => {
+    const root = document.documentElement;
+    if (darkMode) {
+      root.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      root.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [darkMode]);
+  return [darkMode, setDarkMode];
+}
+
 function ErrorMessage({ message, retry }) {
   return (
-    <div style={{ textAlign: 'center', marginTop: '2rem' }}>
-      <p style={{ color: 'red', fontWeight: 'bold' }}>{message}</p>
+    <div className="text-center mt-6">
+      <p className="text-red-500 font-semibold">{message}</p>
       <button
         onClick={retry}
-        style={{
-          background: '#333',
-          color: '#fff',
-          border: 'none',
-          borderRadius: '6px',
-          padding: '0.5rem 1rem',
-          cursor: 'pointer',
-        }}
+        className="bg-gray-800 text-white rounded-lg px-4 py-2 mt-3 hover:bg-gray-700"
       >
         Retry
       </button>
@@ -34,7 +41,6 @@ function ErrorMessage({ message, retry }) {
 export default function PostDetail() {
   const { slug } = useParams();
   const navigate = useNavigate();
-
   const [post, setPost] = useState(null);
   const [commentBody, setCommentBody] = useState('');
   const [editBody, setEditBody] = useState('');
@@ -44,32 +50,24 @@ export default function PostDetail() {
   const [submitting, setSubmitting] = useState(false);
   const [liking, setLiking] = useState(false);
   const [page, setPage] = useState(1);
-  const [replyBodies, setReplyBodies] = useState({}); // { commentId: replyText }
-  const [replyingMap, setReplyingMap] = useState({}); // { commentId: boolean }
+  const [darkMode, setDarkMode] = useDarkMode();
   const commentsEndRef = useRef(null);
-
-  const COMMENTS_PER_PAGE = 5;
   const currentUser = getUserInfo();
 
-  // Fetch post details (expects /posts/:slug/ endpoint)
+  const COMMENTS_PER_PAGE = 5;
+
   const fetchPost = async () => {
     setLoading(true);
     try {
       const res = await api.get(`/posts/${slug}/`);
-      // Ensure comments array and replies structure exist
-      const normalized = {
+      setPost({
         ...res.data,
-        comments: (res.data.comments || []).map(c => ({
-          ...c,
-          replies: c.replies || [],
-        })),
-      };
-      setPost(normalized);
-      setErr('');
+        comments: res.data.comments || [],
+      });
     } catch (e) {
       console.error(e);
-      setErr('Failed to load post. Please check your connection.');
-      toast.error('Could not load post. Try again later.');
+      setErr('Failed to load post.');
+      toast.error('Could not load post.');
     } finally {
       setLoading(false);
     }
@@ -77,15 +75,31 @@ export default function PostDetail() {
 
   useEffect(() => {
     fetchPost();
-    // clean up title on unmount
-    return () => { document.title = 'Blog'; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
 
-  // SEO: update document title when post loads
   useEffect(() => {
     if (post) document.title = `${post.title} | Blog`;
   }, [post]);
+
+  const toggleLike = async () => {
+    if (!isAuthenticated()) {
+      toast.warn('You must be logged in to like.');
+      navigate('/login');
+      return;
+    }
+    if (liking) return;
+    setLiking(true);
+
+    try {
+      const res = await api.post(`/posts/${post.slug}/toggle_like/`);
+      setPost({ ...post, liked: res.data.liked, likes_count: res.data.likes_count });
+    } catch (err) {
+      console.error('Like error:', err);
+      toast.error('Failed to like/unlike post.');
+    } finally {
+      setLiking(false);
+    }
+  };
 
   const addComment = async () => {
     if (!commentBody.trim()) return;
@@ -97,270 +111,185 @@ export default function PostDetail() {
 
     setSubmitting(true);
     try {
-      const res = await api.post(`/posts/${post.id}/add_comment/`, { body: commentBody });
-      const updatedComments = [...(post.comments || []), res.data];
-      setPost({ ...post, comments: updatedComments });
+      const res = await api.post(`/posts/${post.slug}/add_comment/`, { body: commentBody });
+      setPost({ ...post, comments: [...post.comments, res.data] });
       setCommentBody('');
       toast.success('Comment added!');
-      setPage(Math.ceil(updatedComments.length / COMMENTS_PER_PAGE));
-      setTimeout(() => commentsEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 300);
-    } catch (error) {
-      toast.error('Could not add comment.');
-      setErr(error.response?.data?.detail || 'Network error');
+    } catch (err) {
+      console.error('Comment error:', err);
+      toast.error('Failed to add comment.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const toggleLike = async () => {
-    if (!isAuthenticated()) {
-      toast.warn('You must be logged in to like posts.');
-      navigate('/login');
-      return;
-    }
-    if (liking) return;
-    setLiking(true);
-
+  const deleteComment = async (id) => {
     try {
-      const newLiked = !post.liked;
-      setPost({
-        ...post,
-        liked: newLiked,
-        likes_count: post.likes_count + (newLiked ? 1 : -1),
-      });
-
-      const res = await api.post(`/posts/${post.id}/toggle_like/`);
-      setPost({
-        ...post,
-        liked: res.data.liked,
-        likes_count: res.data.likes_count,
-      });
-    } catch (error) {
-      toast.error('Could not toggle like.');
-    } finally {
-      setLiking(false);
-    }
-  };
-
-  const deleteComment = async (commentId) => {
-    try {
-      await api.delete(`/comments/${commentId}/`);
-      const updatedComments = post.comments.filter((c) => c.id !== commentId);
-      setPost({ ...post, comments: updatedComments });
+      await api.delete(`/comments/${id}/`);
+      setPost({ ...post, comments: post.comments.filter(c => c.id !== id) });
       toast.success('Comment deleted.');
     } catch {
       toast.error('Failed to delete comment.');
     }
   };
 
-  // Edit comment
-  const saveEdit = async (commentId) => {
-    if (!editBody.trim()) return;
+  const saveEdit = async (id) => {
     try {
-      const res = await api.put(`/comments/${commentId}/`, { body: editBody });
-      const updatedComments = post.comments.map((c) => (c.id === commentId ? res.data : c));
-      setPost({ ...post, comments: updatedComments });
+      const res = await api.put(`/comments/${id}/`, { body: editBody });
+      const updated = post.comments.map(c => (c.id === id ? res.data : c));
+      setPost({ ...post, comments: updated });
       setEditingId(null);
       setEditBody('');
       toast.success('Comment updated!');
     } catch {
-      toast.error('Failed to edit comment.');
-    }
-  };
-
-  // Reply to a comment (single-level replies)
-  const addReply = async (commentId) => {
-    const body = (replyBodies[commentId] || '').trim();
-    if (!body) return;
-    if (!isAuthenticated()) {
-      toast.warn('You must be logged in to reply.');
-      navigate('/login');
-      return;
-    }
-
-    // optimistic update: add temporary reply with a negative id
-    const tempId = `temp-${Date.now()}`;
-    const tempReply = {
-      id: tempId,
-      body,
-      author: currentUser?.username || 'You',
-      created_at: new Date().toISOString(),
-      is_temp: true,
-    };
-
-    const updatedComments = post.comments.map((c) =>
-      c.id === commentId ? { ...c, replies: [...(c.replies || []), tempReply] } : c
-    );
-    setPost({ ...post, comments: updatedComments });
-    setReplyBodies({ ...replyBodies, [commentId]: '' });
-    setReplyingMap({ ...replyingMap, [commentId]: false });
-    // scroll to bottom of replies
-    setTimeout(() => commentsEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 200);
-
-    try {
-      const res = await api.post(`/comments/${commentId}/reply/`, { body });
-      // replace temp reply with server reply
-      const replaced = post.comments.map((c) => {
-        if (c.id !== commentId) return c;
-        const replies = (c.replies || []).map((r) => (r.id === tempId ? res.data : r));
-        return { ...c, replies };
-      });
-      setPost({ ...post, comments: replaced });
-      toast.success('Reply added!');
-    } catch (error) {
-      // rollback optimistic update
-      const rolledBack = post.comments.map((c) =>
-        c.id === commentId ? { ...c, replies: (c.replies || []).filter((r) => r.id !== tempId) } : c
-      );
-      setPost({ ...post, comments: rolledBack });
-      toast.error('Failed to add reply.');
-    }
-  };
-
-  // Delete a reply
-  const deleteReply = async (commentId, replyId) => {
-    try {
-      await api.delete(`/replies/${replyId}/`);
-      const updatedComments = post.comments.map((c) =>
-        c.id === commentId ? { ...c, replies: (c.replies || []).filter((r) => r.id !== replyId) } : c
-      );
-      setPost({ ...post, comments: updatedComments });
-      toast.success('Reply deleted.');
-    } catch {
-      toast.error('Failed to delete reply.');
+      toast.error('Edit failed.');
     }
   };
 
   const paginatedComments = useMemo(() => {
-    return (post?.comments || []).slice((page - 1) * COMMENTS_PER_PAGE, page * COMMENTS_PER_PAGE);
+    return post?.comments?.slice((page - 1) * COMMENTS_PER_PAGE, page * COMMENTS_PER_PAGE);
   }, [post, page]);
 
   if (loading) {
     return (
-      <div style={{ maxWidth: 700, margin: 'auto' }}>
+      <div className="max-w-2xl mx-auto mt-10">
         <Skeleton height={40} width="60%" />
-        <Skeleton count={8} style={{ marginTop: '1rem' }} />
+        <Skeleton count={8} className="mt-4" />
       </div>
     );
   }
 
   if (err) return <ErrorMessage message={err} retry={fetchPost} />;
-  if (!post) return <p style={{ textAlign: 'center', marginTop: '2rem' }}>❌ Post not found.</p>;
+  if (!post) return <p className="text-center mt-6">Post not found.</p>;
 
   return (
-    <div style={{ maxWidth: 700, margin: 'auto', padding: '1rem' }}>
-      <h2>{post.title}</h2>
+    <div className={`max-w-2xl mx-auto p-4 ${darkMode ? 'dark bg-gray-900 text-gray-100' : 'bg-white text-gray-900'} transition`}>
+      <button
+        onClick={() => setDarkMode(!darkMode)}
+        className="mb-3 px-3 py-1 rounded-lg border dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-800"
+      >
+        {darkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}
+      </button>
 
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{post.content}</ReactMarkdown>
+      {post.image && (
+        <img
+          src={post.image}
+          alt={post.title}
+          className="rounded-xl mb-4 w-full object-cover max-h-96 shadow-md"
+        />
+      )}
+
+      <h1 className="text-2xl font-bold mb-2">{post.title}</h1>
+
+      <div className="prose dark:prose-invert max-w-none mb-4">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          {post.content}
+        </ReactMarkdown>
+      </div>
 
       <button
         onClick={toggleLike}
         disabled={liking}
-        style={{
-          background: post.liked ? '#ffccd5' : '#f1f1f1',
-          border: 'none',
-          borderRadius: '8px',
-          padding: '0.5rem 1rem',
-          cursor: liking ? 'wait' : 'pointer',
-          marginTop: '1rem',
-          transition: 'background 0.3s ease',
-        }}
+        className={`mt-3 px-4 py-2 rounded-lg ${post.liked ? 'bg-pink-500 text-white' : 'bg-gray-200 dark:bg-gray-700'} transition`}
       >
         {post.liked ? '💖 Unlike' : '🤍 Like'} ({post.likes_count})
       </button>
 
-      <h3 style={{ marginTop: '2rem' }}>Comments ({post.comments?.length || 0})</h3>
-
-      {paginatedComments.length > 0 ? (
+      <h2 className="text-xl mt-6 mb-3 font-semibold">Comments ({post.comments?.length || 0})</h2>
+      {paginatedComments?.length ? (
         paginatedComments.map((c) => (
-          <div
-            key={c.id}
-            style={{
-              background: '#fafafa',
-              borderRadius: '8px',
-              padding: '0.75rem',
-              marginBottom: '1rem',
-              border: '1px solid #eee',
-              position: 'relative',
-            }}
-          >
-            {/* Comment body or edit form */}
+          <div key={c.id} className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg mb-3 relative">
             {editingId === c.id ? (
               <>
-                <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)} rows={3} style={{ width: '100%', padding: '0.5rem' }} />
-                <button onClick={() => saveEdit(c.id)} style={{ marginTop: '0.5rem', background: '#333', color: '#fff', border: 'none', padding: '0.4rem 1rem', borderRadius: '6px' }}>Save</button>
-                <button onClick={() => { setEditingId(null); setEditBody(''); }} style={{ marginLeft: '0.5rem', background: '#ccc', border: 'none', padding: '0.4rem 1rem', borderRadius: '6px' }}>Cancel</button>
+                <textarea
+                  value={editBody}
+                  onChange={(e) => setEditBody(e.target.value)}
+                  rows={3}
+                  className="w-full p-2 rounded-md"
+                />
+                <button
+                  onClick={() => saveEdit(c.id)}
+                  className="bg-blue-500 text-white rounded-md px-3 py-1 mt-2"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => { setEditingId(null); setEditBody(''); }}
+                  className="ml-2 bg-gray-400 text-white rounded-md px-3 py-1 mt-2"
+                >
+                  Cancel
+                </button>
               </>
             ) : (
               <>
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{c.body}</ReactMarkdown>
-                <small style={{ color: '#777' }}>{c.author} • {new Date(c.created_at).toLocaleString()}</small>
-
-                {/* comment owner actions */}
+                <div className="prose dark:prose-invert">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {c.body}
+                  </ReactMarkdown>
+                </div>
+                <small className="text-gray-500">
+                  {c.author} • {new Date(c.created_at).toLocaleString()}
+                </small>
                 {currentUser?.username === c.author && (
-                  <div style={{ position: 'absolute', top: '8px', right: '8px' }}>
-                    <button onClick={() => { setEditingId(c.id); setEditBody(c.body); }} style={{ background: 'transparent', border: 'none', color: '#333', cursor: 'pointer', marginRight: '8px' }}>✏️</button>
-                    <button onClick={() => deleteComment(c.id)} style={{ background: 'transparent', border: 'none', color: '#c00', cursor: 'pointer' }}>🗑️</button>
+                  <div className="absolute top-2 right-3 flex gap-2">
+                    <button
+                      onClick={() => { setEditingId(c.id); setEditBody(c.body); }}
+                      className="text-blue-500"
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      onClick={() => deleteComment(c.id)}
+                      className="text-red-500"
+                    >
+                      🗑️
+                    </button>
                   </div>
                 )}
               </>
             )}
-
-            {/* Replies list */}
-            <div style={{ marginTop: '0.8rem', paddingLeft: '1rem' }}>
-              {(c.replies || []).map((r) => (
-                <div key={r.id} style={{ background: '#fff', borderRadius: '6px', padding: '0.5rem', marginBottom: '0.5rem', border: '1px solid #f0f0f0', position: 'relative' }}>
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{r.body}</ReactMarkdown>
-                  <small style={{ color: '#666' }}>{r.author} • {new Date(r.created_at).toLocaleString()}</small>
-
-                  {/* reply owner actions */}
-                  {currentUser?.username === r.author && (
-                    <button onClick={() => deleteReply(c.id, r.id)} style={{ position: 'absolute', top: '8px', right: '8px', background: 'transparent', border: 'none', color: '#c00', cursor: 'pointer' }}>
-                      🗑️
-                    </button>
-                  )}
-                </div>
-              ))}
-
-              {/* Reply input toggle + box */}
-              {replyingMap[c.id] ? (
-                <div style={{ marginTop: '0.5rem' }}>
-                  <textarea value={replyBodies[c.id] || ''} onChange={(e) => setReplyBodies({ ...replyBodies, [c.id]: e.target.value })} rows={2} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px' }} />
-                  <div style={{ marginTop: '0.4rem' }}>
-                    <button onClick={() => addReply(c.id)} style={{ background: '#333', color: '#fff', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px' }}>Reply</button>
-                    <button onClick={() => setReplyingMap({ ...replyingMap, [c.id]: false })} style={{ marginLeft: '0.5rem', background: '#ccc', border: 'none', padding: '0.4rem 0.8rem', borderRadius: '6px' }}>Cancel</button>
-                  </div>
-                </div>
-              ) : (
-                <button onClick={() => setReplyingMap({ ...replyingMap, [c.id]: true })} style={{ marginTop: '0.5rem', background: 'transparent', border: 'none', color: '#007bff', cursor: 'pointer' }}>
-                  Reply
-                </button>
-              )}
-            </div>
           </div>
         ))
       ) : (
-        <p style={{ textAlign: 'center', fontSize: '1.1rem' }}>🗨️ No comments yet. Be the first to share your thoughts!</p>
+        <p className="text-center text-gray-500">No comments yet.</p>
       )}
 
       {/* Pagination */}
       {post.comments?.length > COMMENTS_PER_PAGE && (
-        <div style={{ marginBottom: '1rem' }}>
+        <div className="mt-3 flex justify-center gap-2">
           {Array.from({ length: Math.ceil(post.comments.length / COMMENTS_PER_PAGE) }, (_, i) => (
-            <button key={i} onClick={() => setPage(i + 1)} style={{ marginRight: '0.5rem', fontWeight: page === i + 1 ? 'bold' : 'normal', background: page === i + 1 ? '#ddd' : '#f9f9f9', border: 'none', borderRadius: '5px', padding: '0.3rem 0.6rem' }}>
+            <button
+              key={i}
+              onClick={() => setPage(i + 1)}
+              className={`px-3 py-1 rounded-md text-sm font-medium ${
+                page === i + 1
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-100'
+              }`}
+            >
               {i + 1}
             </button>
           ))}
         </div>
       )}
 
-      {/* Add comment form */}
-      <div style={{ marginTop: '2rem' }}>
-        <textarea value={commentBody} onChange={(e) => setCommentBody(e.target.value)} placeholder="Write a comment..." rows={4} style={{ width: '100%', padding: '0.5rem', borderRadius: '6px' }} />
-        <button onClick={addComment} disabled={submitting || !commentBody.trim()} style={{ marginTop: '0.5rem', background: '#333', color: '#fff', padding: '0.5rem 1rem', border: 'none', borderRadius: '6px', cursor: submitting ? 'wait' : 'pointer' }}>
+      {/* Add Comment */}
+      <div className="mt-6">
+        <textarea
+          value={commentBody}
+          onChange={(e) => setCommentBody(e.target.value)}
+          rows={3}
+          placeholder="Write a comment..."
+          className="w-full p-2 border dark:border-gray-700 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+        />
+        <button
+          onClick={addComment}
+          disabled={submitting || !commentBody.trim()}
+          className="mt-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+        >
           {submitting ? 'Submitting...' : 'Add Comment'}
         </button>
-        {err && <p style={{ color: 'red' }}>{err}</p>}
+        {err && <p className="text-red-500 mt-2">{err}</p>}
         <div ref={commentsEndRef} />
       </div>
     </div>

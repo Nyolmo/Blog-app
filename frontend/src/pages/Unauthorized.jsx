@@ -5,46 +5,24 @@ export default function Unauthorized() {
   const navigate = useNavigate();
 
   return (
-    <div
-      style={{
-        textAlign: 'center',
-        marginTop: '10%',
-        padding: '2rem',
-      }}
-    >
+    <div className="text-center mt-32 px-6">
       {/* 🚫 Icon & Message */}
-      <h1 style={{ fontSize: '2rem', color: '#d9534f' }}>🚫 Access Denied</h1>
-      <p style={{ fontSize: '1.1rem', color: '#555' }}>
+      <h1 className="text-3xl font-bold text-red-600 mb-2">🚫 Access Denied</h1>
+      <p className="text-lg text-gray-600">
         You don’t have permission to view this page.
       </p>
 
       {/* 💡 Helpful next steps */}
-      <div style={{ marginTop: '1.5rem' }}>
+      <div className="mt-6 flex justify-center gap-4">
         <button
           onClick={() => navigate(-1)}
-          style={{
-            marginRight: '0.5rem',
-            padding: '0.6rem 1rem',
-            backgroundColor: '#6c757d',
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-          }}
+          className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition"
         >
           ← Go Back
         </button>
-
         <button
           onClick={() => navigate('/login')}
-          style={{
-            padding: '0.6rem 1rem',
-            backgroundColor: '#007bff',
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-          }}
+          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
         >
           Login as Staff
         </button>
