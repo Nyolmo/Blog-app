@@ -1,35 +1,24 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import PostList from './pages/PostList';
+import PostDetail from './pages/PostDetail';
+import Login from './pages/Login';
+import PostForm from './pages/PostForm';
+import ProtectedRoute from './components/ProtectedRoute';
 
-function App() {
-  const [count, setCount] = useState(0)
-
+export default function App() {
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <Router>
+      <header>
+        <Link to="/">Home</Link> | <Link to="/create">Create Post</Link> | <Link to="/login">Login</Link>
+      </header>
+      <Routes>
+        <Route path="/" element={<PostList />} />
+        <Route path="/posts/:slug" element={<PostDetail />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/create" element={<ProtectedRoute><PostForm /></ProtectedRoute>} />
+        <Route path="/edit/:slug" element={<ProtectedRoute><PostForm edit={true} /></ProtectedRoute>} />
+      </Routes>
+    </Router>
+  );
 }
-
-export default App

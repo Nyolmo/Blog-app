@@ -14,7 +14,11 @@
     "jwt-decode": "^4.0.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "react-router-dom": "^7.9.5"
+    "react-loading-skeleton": "^3.5.0",
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^7.9.5",
+    "react-toastify": "^11.0.5",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
